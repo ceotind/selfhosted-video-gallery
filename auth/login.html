@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign in</title>
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #14161a;
+        --muted: #5f6672;
+        --card: #f4f5f7;
+        --line: #e3e5e9;
+        --accent: #1f6feb;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0e1014;
+          --fg: #eef0f4;
+          --muted: #97a0ad;
+          --card: #171a20;
+          --line: #242a33;
+          --accent: #7aa7ff;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        padding: 20px;
+        background: var(--bg);
+        color: var(--fg);
+        font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      }
+      form {
+        width: 100%;
+        max-width: 330px;
+      }
+      h1 {
+        margin: 0 0 18px;
+        font-size: 19px;
+        font-weight: 650;
+      }
+      label {
+        display: block;
+        margin: 0 0 6px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      input {
+        width: 100%;
+        margin: 0 0 14px;
+        padding: 11px 12px;
+        font: inherit;
+        color: var(--fg);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        outline: none;
+      }
+      input:focus { border-color: var(--accent); }
+      button {
+        width: 100%;
+        padding: 11px 14px;
+        font: inherit;
+        font-weight: 600;
+        color: #fff;
+        background: var(--accent);
+        border: 0;
+        border-radius: 9px;
+        cursor: pointer;
+      }
+      button:active { transform: translateY(1px); }
+      .err {
+        margin: 0 0 14px;
+        padding: 9px 11px;
+        font-size: 13px;
+        color: #b42318;
+        background: #fee4e2;
+        border-radius: 8px;
+      }
+      @media (prefers-color-scheme: dark) {
+        .err { color: #ffb4ab; background: #3b1512; }
+      }
+    </style>
+  </head>
+  <body>
+    <form method="post" action="/api/login" autocomplete="on">
+      <h1>Sign in</h1>
+      {{ERROR}}
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus />
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required />
+      <input type="hidden" name="next" value="/" />
+      <button type="submit">Sign in</button>
+    </form>
+    <script>
+      // Keep the page the person asked for, so a shared link lands where they meant it.
+      var n = new URLSearchParams(location.search).get('next');
+      if (n && n.charAt(0) === '/' && n.charAt(1) !== '/') {
+        document.querySelector('input[name="next"]').value = n;
+      }
+    </script>
+  </body>
+</html>

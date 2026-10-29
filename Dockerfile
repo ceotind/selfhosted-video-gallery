@@ -7,11 +7,20 @@ COPY public ./public
 COPY src ./src
 RUN npm run build
 
+FROM node:22-alpine AS authdeps
+WORKDIR /auth
+COPY auth/package.json ./
+RUN npm install --omit=dev --no-audit --no-fund
+
 FROM nginx:1.27-alpine
-RUN apk add --no-cache nodejs ffmpeg
+# ffmpeg for posters, libstdc++ for the node binary copied in below.
+RUN apk add --no-cache ffmpeg libstdc++
+COPY --from=node:22-alpine /usr/local/bin/node /usr/local/bin/node
+COPY --from=authdeps /auth/node_modules /app/node_modules
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /app/dist
 COPY scripts /app/scripts
+COPY auth/login.html /app/auth/login.html
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 EXPOSE 80

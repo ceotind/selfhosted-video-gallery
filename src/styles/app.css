@@ -73,6 +73,9 @@ a { color: inherit; text-decoration: none; }
 }
 .icon:hover { border-color: var(--accent); }
 
+.out { margin: 0; }
+.out button { font-size: 15px; }
+
 :root[data-theme='light'] .t-dark,
 :root[data-theme='dark'] .t-light { display: none; }
 

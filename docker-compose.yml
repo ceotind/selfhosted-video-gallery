@@ -6,13 +6,18 @@ services:
       - "${GALLERY_PORT:-8080}:80"
     environment:
       POSTER_WORKERS: "2"
+      SESSION_DAYS: "30"
     volumes:
       # Point VIDEOS_DIR at the folder that holds your videos.
       - ${VIDEOS_DIR:-./videos}:/data/videos:ro
+      # Logins are read from this file on the first start only. Never commit it.
+      - ${SEED_FILE:-./seed-users.txt}:/data/seed-users.txt:ro
+      - gallery_db:/data/db
       - gallery_posters:/data/posters
       - gallery_meta:/data/meta
     restart: unless-stopped
 
 volumes:
+  gallery_db:
   gallery_posters:
   gallery_meta:
