@@ -1,18 +1,25 @@
 #!/bin/sh
 set -e
 
+UID_RUN="${PUID:-1000}"
+GID_RUN="${PGID:-1000}"
+
 mkdir -p /data/meta/f /data/posters /data/db
 
-# The database folder is a real host folder. Give it back to the host user so it
-# can be read and copied without sudo.
-if [ -d /data/db ]; then
-  chown -R "${PUID:-1000}:${PGID:-1000}" /data/db 2>/dev/null || true
-fi
+# The data folders are real host folders. Give them back to the host user and run
+# the writers as that user, so every file they create belongs to you.
+for d in /data/db /data/posters /data/meta; do
+  chown -R "$UID_RUN:$GID_RUN" "$d" 2>/dev/null || true
+done
+
+as_user() {
+  su-exec "$UID_RUN:$GID_RUN" "$@"
+}
 
 export AUTH_DB="${AUTH_DB:-/data/db/gallery.db}"
 
 echo "[entrypoint] scanning videos"
-if ! node /app/scripts/scan.mjs /data/videos /data/meta; then
+if ! as_user node /app/scripts/scan.mjs /data/videos /data/meta; then
   echo "[entrypoint] scan failed, serving an empty library"
   printf '{"id":"root","name":"","path":[],"folders":[],"videos":[],"count":0}' > /data/meta/tree.json
 fi
@@ -20,16 +27,16 @@ fi
 # First run only: if no user exists yet and a seed file is mounted, create the logins.
 SEED=/data/seed/seed-users.txt
 if [ -f "$SEED" ]; then
-  COUNT=$(node -e "const {DatabaseSync}=require('node:sqlite');try{const d=new DatabaseSync(process.env.AUTH_DB);console.log(d.prepare('select count(*) as n from users').get().n)}catch(e){console.log(0)}" 2>/dev/null || echo 0)
+  COUNT=$(as_user node -e "const {DatabaseSync}=require('node:sqlite');try{const d=new DatabaseSync(process.env.AUTH_DB);console.log(d.prepare('select count(*) as n from users').get().n)}catch(e){console.log(0)}" 2>/dev/null || echo 0)
   if [ "$COUNT" = "0" ]; then
     echo "[entrypoint] no users yet, seeding from $SEED"
-    node /app/scripts/seed-users.mjs "$SEED" || echo "[entrypoint] seed failed"
+    as_user node /app/scripts/seed-users.mjs "$SEED" || echo "[entrypoint] seed failed"
     echo "[entrypoint] seeded. Delete secrets/seed-users.txt now that the users exist."
   fi
 fi
 
 echo "[entrypoint] starting login service"
-node /app/scripts/auth-server.mjs &
+as_user node /app/scripts/auth-server.mjs &
 AUTH_PID=$!
 
 # Do not take traffic until the login service answers. Fail closed, not open.
@@ -49,6 +56,6 @@ if [ $i -ge 60 ]; then
 fi
 
 # Posters and durations fill in after the site is already answering requests.
-node /app/scripts/posters.mjs /data/videos /data/posters /data/meta &
+as_user node /app/scripts/posters.mjs /data/videos /data/posters /data/meta &
 
 exec nginx -g 'daemon off;'

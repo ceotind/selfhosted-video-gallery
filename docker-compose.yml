@@ -9,7 +9,7 @@ services:
       SESSION_DAYS: "30"
       # Comma separated list of admins.
       ADMIN_USERS: "dilshad"
-      # Owner of the database folder on the host. Use your own id: run `id -u` and `id -g`.
+      # Owner of the data folders on the host. Use your own id: run `id -u` and `id -g`.
       PUID: "${PUID:-1000}"
       PGID: "${PGID:-1000}"
     volumes:
@@ -17,12 +17,8 @@ services:
       - ${VIDEOS_DIR:-./videos}:/data/videos:ro
       # Logins are read from secrets/seed-users.txt on the first start only.
       - ${SEED_DIR:-./secrets}:/data/seed:ro
-      # The database file lives on the host, in a plain folder you can see and copy.
+      # Everything the app writes lives in plain host folders under DATA_DIR.
       - ${DATA_DIR:-./data}/db:/data/db
-      - gallery_posters:/data/posters
-      - gallery_meta:/data/meta
+      - ${DATA_DIR:-./data}/posters:/data/posters
+      - ${DATA_DIR:-./data}/meta:/data/meta
     restart: unless-stopped
-
-volumes:
-  gallery_posters:
-  gallery_meta:

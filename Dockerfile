@@ -13,8 +13,8 @@ COPY auth/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 
 FROM nginx:1.27-alpine
-# ffmpeg for posters, libstdc++ for the node binary copied in below.
-RUN apk add --no-cache ffmpeg libstdc++
+# ffmpeg for posters, libstdc++ for the node binary, su-exec to drop down to your user.
+RUN apk add --no-cache ffmpeg libstdc++ su-exec
 COPY --from=node:22-alpine /usr/local/bin/node /usr/local/bin/node
 COPY --from=authdeps /auth/node_modules /app/node_modules
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
