@@ -12,11 +12,13 @@ if ! node /app/scripts/scan.mjs /data/videos /data/meta; then
 fi
 
 # First run only: if no user exists yet and a seed file is mounted, create the logins.
-if [ -f /data/seed-users.txt ]; then
+SEED=/data/seed/seed-users.txt
+if [ -f "$SEED" ]; then
   COUNT=$(node -e "const {DatabaseSync}=require('node:sqlite');try{const d=new DatabaseSync(process.env.AUTH_DB);console.log(d.prepare('select count(*) as n from users').get().n)}catch(e){console.log(0)}" 2>/dev/null || echo 0)
   if [ "$COUNT" = "0" ]; then
-    echo "[entrypoint] no users yet, seeding from /data/seed-users.txt"
-    node /app/scripts/seed-users.mjs /data/seed-users.txt || echo "[entrypoint] seed failed"
+    echo "[entrypoint] no users yet, seeding from $SEED"
+    node /app/scripts/seed-users.mjs "$SEED" || echo "[entrypoint] seed failed"
+    echo "[entrypoint] seeded. Delete secrets/seed-users.txt now that the users exist."
   fi
 fi
 

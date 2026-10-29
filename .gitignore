@@ -6,4 +6,4 @@ videos/*
 data
 .env
 .DS_Store
-seed-users.txt
+secrets/

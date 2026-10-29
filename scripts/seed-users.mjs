@@ -9,8 +9,12 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { hash as argonHash } from '@node-rs/argon2';
 
-const file = process.argv[2] || '/data/seed-users.txt';
+const file = process.argv[2] || '/data/seed/seed-users.txt';
 const dbPath = process.env.AUTH_DB || '/data/db/gallery.db';
+const ADMINS = String(process.env.ADMIN_USERS || 'dilshad')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
 const ARGON = { algorithm: 2, memoryCost: 19456, timeCost: 2, parallelism: 1 };
 
 let text;
@@ -43,24 +47,31 @@ db.exec(`
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0
   );
 `);
 
+// Older databases predate the admin flag.
+if (!db.prepare('PRAGMA table_info(users)').all().map((c) => c.name).includes('is_admin')) {
+  db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+}
+
 const find = db.prepare('SELECT id FROM users WHERE username = ?');
-const insert = db.prepare('INSERT INTO users (username, password_hash, active, created_at) VALUES (?, ?, 1, ?)');
-const update = db.prepare('UPDATE users SET password_hash = ?, active = 1 WHERE id = ?');
+const insert = db.prepare('INSERT INTO users (username, password_hash, active, created_at, is_admin) VALUES (?, ?, 1, ?, ?)');
+const update = db.prepare('UPDATE users SET password_hash = ?, active = 1, is_admin = ? WHERE id = ?');
 
 let added = 0;
 let changed = 0;
 for (const r of rows) {
   const hash = await argonHash(r.password, ARGON);
+  const admin = ADMINS.includes(r.username) ? 1 : 0;
   const hit = find.get(r.username);
   if (hit) {
-    update.run(hash, hit.id);
+    update.run(hash, admin, hit.id);
     changed++;
   } else {
-    insert.run(r.username, hash, Date.now());
+    insert.run(r.username, hash, Date.now(), admin);
     added++;
   }
 }

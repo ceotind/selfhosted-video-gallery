@@ -7,11 +7,13 @@ services:
     environment:
       POSTER_WORKERS: "2"
       SESSION_DAYS: "30"
+      # Comma separated list of admins.
+      ADMIN_USERS: "dilshad"
     volumes:
       # Point VIDEOS_DIR at the folder that holds your videos.
       - ${VIDEOS_DIR:-./videos}:/data/videos:ro
-      # Logins are read from this file on the first start only. Never commit it.
-      - ${SEED_FILE:-./seed-users.txt}:/data/seed-users.txt:ro
+      # Logins are read from secrets/seed-users.txt on the first start only.
+      - ${SEED_DIR:-./secrets}:/data/seed:ro
       - gallery_db:/data/db
       - gallery_posters:/data/posters
       - gallery_meta:/data/meta

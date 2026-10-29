@@ -55,6 +55,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS attempts_at ON attempts(at);
 `);
 
+// Older databases predate the admin flag.
+const userColumns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+if (!userColumns.includes('is_admin')) {
+  db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+}
+
+// The configured admins are always admins, whatever a seed file says.
+const ADMINS = String(process.env.ADMIN_USERS || 'dilshad')
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+for (const name of ADMINS) db.prepare('UPDATE users SET is_admin = 1 WHERE username = ?').run(name);
+
 const q = {
   user: db.prepare('SELECT id, username, password_hash, active FROM users WHERE username = ?'),
   userById: db.prepare('SELECT id, username, active FROM users WHERE id = ?'),
@@ -72,6 +85,21 @@ const q = {
   countUserAttempts: db.prepare('SELECT COUNT(*) AS n FROM attempts WHERE username = ? AND at > ?'),
   countIpAttempts: db.prepare('SELECT COUNT(*) AS n FROM attempts WHERE ip = ? AND at > ?'),
   pruneAttempts: db.prepare('DELETE FROM attempts WHERE at < ?'),
+  me: db.prepare('SELECT id, username, active, is_admin FROM users WHERE id = ?'),
+  adminUsers: db.prepare(
+    `SELECT u.id, u.username, u.active, u.is_admin, u.created_at,
+            (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > ?) AS live
+       FROM users u ORDER BY u.is_admin DESC, u.username`
+  ),
+  adminSessions: db.prepare(
+    `SELECT s.id, s.user_id, u.username, s.created_at, s.expires_at, s.last_seen, s.ip, s.ua
+       FROM sessions s JOIN users u ON u.id = s.user_id
+      WHERE s.expires_at > ?
+      ORDER BY s.last_seen DESC LIMIT 200`
+  ),
+  delSessionById: db.prepare('DELETE FROM sessions WHERE id = ?'),
+  setActive: db.prepare('UPDATE users SET active = ? WHERE username = ?'),
+  delSessionsFor: db.prepare('DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE username = ?)'),
 };
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -212,6 +240,94 @@ const messages = {
   off: 'That account is not active.',
 };
 
+const esc = (s) =>
+  String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const when = (ms) => {
+  if (!ms) return '-';
+  const d = new Date(Number(ms));
+  return d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+};
+
+const ADMIN_CSS = `
+:root{--bg:#fff;--fg:#14161a;--muted:#5f6672;--card:#f4f5f7;--line:#e3e5e9;--accent:#1f6feb;--bad:#b42318}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1014;--fg:#eef0f4;--muted:#97a0ad;--card:#171a20;--line:#242a33;--accent:#7aa7ff;--bad:#ffb4ab}}
+*{box-sizing:border-box}
+body{margin:0;padding:22px;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+h1{font-size:18px;margin:0 0 4px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:26px 0 10px}
+p.sub{margin:0 0 18px;color:var(--muted);font-size:13px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+tr:last-child td{border-bottom:0}
+button{font:inherit;font-size:12px;padding:5px 10px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
+td form{display:inline;margin:0}
+.tag{font-size:11px;padding:2px 6px;border-radius:5px;background:var(--line);color:var(--muted)}
+.note{margin:14px 0 0;padding:9px 11px;font-size:13px;border-radius:8px;background:var(--card);border:1px solid var(--line)}
+a{color:var(--accent);text-decoration:none}
+@media(max-width:640px){td.hide,th.hide{display:none}}
+`;
+
+function adminPage(me, users, sessions, msg) {
+  const notes = {
+    revoked: 'Session killed. That browser is signed out now.',
+    disabled: 'Account disabled and all its sessions removed.',
+    enabled: 'Account enabled again.',
+    self: 'You cannot disable your own account.',
+  };
+  const userRows = users
+    .map(
+      (u) => `<tr>
+        <td><strong>${esc(u.username)}</strong>${u.is_admin ? ' <span class="tag">admin</span>' : ''}</td>
+        <td>${u.active ? 'active' : '<span class="tag">disabled</span>'}</td>
+        <td>${u.live}</td>
+        <td class="hide">${when(u.created_at)}</td>
+        <td>${
+          u.username === me.username
+            ? '<span class="tag">you</span>'
+            : `<form method="post" action="/admin/user"><input type="hidden" name="username" value="${esc(u.username)}"><input type="hidden" name="action" value="${u.active ? 'off' : 'on'}"><button class="${u.active ? 'danger' : ''}" type="submit">${u.active ? 'Disable' : 'Enable'}</button></form>`
+        }</td>
+      </tr>`
+    )
+    .join('');
+
+  const sessionRows = sessions
+    .map(
+      (s) => `<tr>
+        <td><strong>${esc(s.username)}</strong></td>
+        <td class="hide">${esc(s.ip || '-')}</td>
+        <td>${when(s.last_seen)}</td>
+        <td class="hide">${when(s.expires_at)}</td>
+        <td><form method="post" action="/admin/revoke"><input type="hidden" name="id" value="${s.id}"><button class="danger" type="submit">Sign out</button></form></td>
+      </tr>`
+    )
+    .join('');
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin</title><meta name="robots" content="noindex"><meta name="color-scheme" content="light dark">
+<style>${ADMIN_CSS}</style></head><body>
+<h1>Access</h1>
+<p class="sub">Signed in as ${esc(me.username)}. <a href="/">Back to the videos</a></p>
+${msg && notes[msg] ? `<p class="note">${notes[msg]}</p>` : ''}
+<h2>People (${users.length})</h2>
+<table><thead><tr><th>Name</th><th>Status</th><th>Open sessions</th><th class="hide">Added</th><th></th></tr></thead><tbody>${userRows}</tbody></table>
+<h2>Signed in now (${sessions.length})</h2>
+<table><thead><tr><th>Name</th><th class="hide">Address</th><th>Last seen</th><th class="hide">Expires</th><th></th></tr></thead><tbody>${
+    sessionRows || '<tr><td colspan="5">Nobody is signed in.</td></tr>'
+  }</tbody></table>
+<p class="note">Disabling a person removes every session they have, at once.</p>
+</body></html>`;
+}
+
+function blockedPage() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Not allowed</title>
+<style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#0e1014;color:#eef0f4}</style>
+</head><body><div><h1>Not allowed</h1><p>This area is for the admin.</p><p><a style="color:#7aa7ff" href="/">Back</a></p></div></body></html>`;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const send = (r) => {
@@ -291,6 +407,53 @@ const server = http.createServer(async (req, res) => {
         body: '',
         headers: { location: '/login', 'set-cookie': setCookie(req, '', 0), 'cache-control': 'no-store' },
       });
+    }
+
+    if (url.pathname === '/api/me') {
+      const s = checkSession(cookies(req)[COOKIE]);
+      if (!s) return send(json(401, { error: 'not signed in' }));
+      const u = q.me.get(s.userId);
+      if (!u || !u.active) return send(json(401, { error: 'not signed in' }));
+      return send(json(200, { username: u.username, admin: !!u.is_admin }));
+    }
+
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+      const s = checkSession(cookies(req)[COOKIE]);
+      if (!s) return send({ status: 302, body: '', headers: { location: '/login?next=/admin', 'cache-control': 'no-store' } });
+      const u = q.me.get(s.userId);
+      if (!u || !u.is_admin || !u.active) return send(page(403, blockedPage()));
+
+      // Browsers always send Origin on a cross-site POST, so this stops forged forms.
+      if (req.method === 'POST') {
+        const origin = req.headers.origin || '';
+        const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+        if (origin && host && !origin.endsWith('//' + host)) {
+          return send(page(403, blockedPage()));
+        }
+        const body = parseForm(await readBody(req), req.headers['content-type']);
+
+        if (url.pathname === '/admin/revoke' && body.id) {
+          q.delSessionById.run(Number(body.id));
+          cache.clear();
+          return send({ status: 303, body: '', headers: { location: '/admin?m=revoked', 'cache-control': 'no-store' } });
+        }
+        if (url.pathname === '/admin/user' && body.username) {
+          const target = String(body.username).toLowerCase();
+          if (target === u.username) {
+            return send({ status: 303, body: '', headers: { location: '/admin?m=self', 'cache-control': 'no-store' } });
+          }
+          const off = body.action === 'off';
+          q.setActive.run(off ? 0 : 1, target);
+          if (off) q.delSessionsFor.run(target);
+          cache.clear();
+          return send({ status: 303, body: '', headers: { location: '/admin?m=' + (off ? 'disabled' : 'enabled'), 'cache-control': 'no-store' } });
+        }
+      }
+
+      const t = now();
+      const users = q.adminUsers.all(t);
+      const sessions = q.adminSessions.all(t);
+      return send(page(200, adminPage(u, users, sessions, url.searchParams.get('m'))));
     }
 
     if (url.pathname === '/__health') {

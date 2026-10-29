@@ -5,4 +5,4 @@ videos
 data
 .git
 .env
-seed-users.txt
+secrets/

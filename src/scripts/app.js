@@ -248,4 +248,10 @@ async function openFolderSilent(id) {
   } catch {}
   const id = new URLSearchParams(location.search).get('f') || 'root';
   await openFolderSilent(id);
+
+  // Show the admin link only for admins.
+  try {
+    const me = await getJSON('/api/me');
+    if (me && me.admin) document.getElementById('admin').hidden = false;
+  } catch {}
 })();

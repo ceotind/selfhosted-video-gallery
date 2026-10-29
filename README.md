@@ -42,28 +42,38 @@ Change the port in `docker-compose.yml` if 8080 is taken.
 ## Logins
 
 - Every page, every poster and every video byte is behind the login. There is no public file link.
-- Users are read from `seed-users.txt` on the first start, then stored as Argon2id hashes in SQLite.
+- Users are read from `secrets/seed-users.txt` on the first start, then stored as Argon2id hashes in SQLite.
 - Format: one per line, `username password`. Blank lines and lines starting with `#` are skipped.
 - Passwords are never stored in plain text in the database, and no password is ever logged.
 - Change a password or add a person: edit the file, then run
 
 ```sh
-docker compose exec gallery node /app/scripts/seed-users.mjs /data/seed-users.txt
+docker compose exec gallery node /app/scripts/seed-users.mjs /data/seed/seed-users.txt
 ```
 
-- `seed-users.txt` is gitignored, dockerignored and mounted read only. Keep it `chmod 600`.
-  Delete it from the server once the users exist, if you prefer.
+- `secrets/` is gitignored, dockerignored and mounted read only. Keep the file `chmod 600`.
+  Once the users exist, delete `secrets/seed-users.txt` from the server. The container does not need it again.
 - Sessions last 30 days. Change with `SESSION_DAYS`.
 - Signing out deletes the session row, so a copied cookie stops working at once.
 - Rate limit: 8 failures per account, or 25 per address, inside 15 minutes.
-- Cut a person off immediately:
-
-```sh
-docker compose exec gallery node -e "const {DatabaseSync}=require('node:sqlite');const d=new DatabaseSync('/data/db/gallery.db');d.prepare('delete from sessions where user_id=(select id from users where username=?)').run('kevin');console.log('sessions cleared')"
-```
-
 - Wrong password and unknown username return the same message. The page does not reveal which accounts exist.
-- Behind a TLS proxy, send `X-Forwarded-Proto: https` so the session cookie gets the Secure flag.
+
+## Admin
+
+- Set `ADMIN_USERS` in `docker-compose.yml`. Default is `dilshad`. Comma separate several names.
+- Admins see a gear in the header that opens `/admin`.
+- The admin page lists every person, their open sessions, the address and the last time seen.
+- It can sign one browser out, or disable a person. Disabling removes all their sessions at once.
+- An admin cannot disable their own account.
+- Everyone else gets a plain "not allowed" page. The check runs on the server, not in the page.
+- Every admin form post is rejected when the `Origin` header is another site.
+
+## HTTPS
+
+- Put the container behind a TLS proxy and send `X-Forwarded-Proto`.
+- With `https`, the session cookie gets the `Secure` flag and responses carry HSTS.
+- With `http`, nginx answers 301 to the same URL on `https`.
+- With no header at all, nothing is forced, so local access over plain http still works.
 
 ## Layout
 
