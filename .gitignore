@@ -5,5 +5,14 @@ videos/*
 !videos/.gitkeep
 data
 .env
+.env.*
+!.env.example
 .DS_Store
 secrets/
+seed-users.txt
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
