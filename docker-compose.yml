@@ -9,17 +9,20 @@ services:
       SESSION_DAYS: "30"
       # Comma separated list of admins.
       ADMIN_USERS: "dilshad"
+      # Owner of the database folder on the host. Use your own id: run `id -u` and `id -g`.
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
     volumes:
       # Point VIDEOS_DIR at the folder that holds your videos.
       - ${VIDEOS_DIR:-./videos}:/data/videos:ro
       # Logins are read from secrets/seed-users.txt on the first start only.
       - ${SEED_DIR:-./secrets}:/data/seed:ro
-      - gallery_db:/data/db
+      # The database file lives on the host, in a plain folder you can see and copy.
+      - ${DATA_DIR:-./data}/db:/data/db
       - gallery_posters:/data/posters
       - gallery_meta:/data/meta
     restart: unless-stopped
 
 volumes:
-  gallery_db:
   gallery_posters:
   gallery_meta:

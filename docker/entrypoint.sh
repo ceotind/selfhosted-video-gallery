@@ -3,6 +3,12 @@ set -e
 
 mkdir -p /data/meta/f /data/posters /data/db
 
+# The database folder is a real host folder. Give it back to the host user so it
+# can be read and copied without sudo.
+if [ -d /data/db ]; then
+  chown -R "${PUID:-1000}:${PGID:-1000}" /data/db 2>/dev/null || true
+fi
+
 export AUTH_DB="${AUTH_DB:-/data/db/gallery.db}"
 
 echo "[entrypoint] scanning videos"

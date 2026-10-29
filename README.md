@@ -39,6 +39,15 @@ Change the port in `docker-compose.yml` if 8080 is taken.
    records durations. The site is already serving while this runs.
 3. nginx serves the static site, the posters, the index and the video files themselves.
 
+## Database
+
+- It is one SQLite file, and it lives in a normal folder on the host: `./data/db/gallery.db`.
+- The folder is mounted into the container. Nothing is hidden inside a Docker volume.
+- The folder is chowned to `PUID:PGID` at start, so you can copy it without sudo.
+- Copy the whole `data/db` folder. Copying only `gallery.db` can miss the last few writes,
+  because SQLite keeps a write-ahead file next to it.
+- Stop the container before copying if you want a guaranteed clean set.
+
 ## Logins
 
 - Every page, every poster and every video byte is behind the login. There is no public file link.
