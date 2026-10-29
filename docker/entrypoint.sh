@@ -16,6 +16,16 @@ as_user() {
   su-exec "$UID_RUN:$GID_RUN" "$@"
 }
 
+# nginx workers must be able to read the videos. Give them the group that owns
+# the video folder, without touching the folder itself.
+if ! getent group "$GID_RUN" >/dev/null 2>&1; then
+  addgroup -g "$GID_RUN" -S videogrp 2>/dev/null || true
+fi
+VIDEO_GROUP=$(getent group "$GID_RUN" | cut -d: -f1)
+if [ -n "$VIDEO_GROUP" ]; then
+  addgroup nginx "$VIDEO_GROUP" 2>/dev/null || true
+fi
+
 export AUTH_DB="${AUTH_DB:-/data/db/gallery.db}"
 
 echo "[entrypoint] scanning videos"
