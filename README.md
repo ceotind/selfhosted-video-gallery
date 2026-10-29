@@ -58,9 +58,18 @@ docker compose exec gallery node /app/scripts/seed-users.mjs /data/seed/seed-use
 - Rate limit: 8 failures per account, or 25 per address, inside 15 minutes.
 - Wrong password and unknown username return the same message. The page does not reveal which accounts exist.
 
+## Passwords
+
+- Everyone changes their own password at `/account`, from the key icon in the header.
+- They must type the current password first. Minimum 10 characters.
+- Changing a password signs out every other browser for that person, and keeps the current one.
+- Admins set anyone's password from the Password column on `/admin`. No old password needed.
+- Setting someone's password signs that person out everywhere.
+
 ## Admin
 
 - Set `ADMIN_USERS` in `docker-compose.yml`. Default is `dilshad`. Comma separate several names.
+- A template for the seed file sits at `seed-users.example.txt`. Copy it to `secrets/seed-users.txt`.
 - Admins see a gear in the header that opens `/admin`.
 - The admin page lists every person, their open sessions, the address and the last time seen.
 - It can sign one browser out, or disable a person. Disabling removes all their sessions at once.

@@ -100,6 +100,10 @@ const q = {
   delSessionById: db.prepare('DELETE FROM sessions WHERE id = ?'),
   setActive: db.prepare('UPDATE users SET active = ? WHERE username = ?'),
   delSessionsFor: db.prepare('DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE username = ?)'),
+  setPassword: db.prepare('UPDATE users SET password_hash = ? WHERE id = ?'),
+  setPasswordByName: db.prepare('UPDATE users SET password_hash = ? WHERE username = ?'),
+  delOtherSessions: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id <> ?'),
+  delAllSessions: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
 };
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -249,6 +253,18 @@ const when = (ms) => {
   return d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
 };
 
+const LOGIN_CSS = `
+:root{--bg:#fff;--fg:#14161a;--muted:#5f6672;--card:#f4f5f7;--line:#e3e5e9;--accent:#1f6feb}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1014;--fg:#eef0f4;--muted:#97a0ad;--card:#171a20;--line:#242a33;--accent:#7aa7ff}}
+*{box-sizing:border-box}
+body{display:grid;place-items:center;min-height:100vh;margin:0;padding:20px;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+h1{margin:0 0 14px;font-size:19px;font-weight:650}
+label{display:block;margin:0 0 6px;font-size:12px;color:var(--muted)}
+input{width:100%;margin:0 0 14px;padding:11px 12px;font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:9px;outline:none}
+input:focus{border-color:var(--accent)}
+button{width:100%;padding:11px 14px;font:inherit;font-weight:600;color:#fff;background:var(--accent);border:0;border-radius:9px;cursor:pointer}
+`;
+
 const ADMIN_CSS = `
 :root{--bg:#fff;--fg:#14161a;--muted:#5f6672;--card:#f4f5f7;--line:#e3e5e9;--accent:#1f6feb;--bad:#b42318}
 @media (prefers-color-scheme:dark){:root{--bg:#0e1014;--fg:#eef0f4;--muted:#97a0ad;--card:#171a20;--line:#242a33;--accent:#7aa7ff;--bad:#ffb4ab}}
@@ -265,6 +281,8 @@ button{font:inherit;font-size:12px;padding:5px 10px;color:var(--fg);background:v
 button:hover{border-color:var(--accent)}
 button.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
 td form{display:inline;margin:0}
+input.pw{width:120px;padding:5px 7px;font:inherit;font-size:12px;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px}
+input.pw:focus{outline:none;border-color:var(--accent)}
 .tag{font-size:11px;padding:2px 6px;border-radius:5px;background:var(--line);color:var(--muted)}
 .note{margin:14px 0 0;padding:9px 11px;font-size:13px;border-radius:8px;background:var(--card);border:1px solid var(--line)}
 a{color:var(--accent);text-decoration:none}
@@ -277,6 +295,9 @@ function adminPage(me, users, sessions, msg) {
     disabled: 'Account disabled and all its sessions removed.',
     enabled: 'Account enabled again.',
     self: 'You cannot disable your own account.',
+    pw: 'Password set. Their other sessions are signed out.',
+    pwshort: `Passwords need ${MIN_PASSWORD} characters or more.`,
+    nouser: 'That person does not exist.',
   };
   const userRows = users
     .map(
@@ -285,6 +306,7 @@ function adminPage(me, users, sessions, msg) {
         <td>${u.active ? 'active' : '<span class="tag">disabled</span>'}</td>
         <td>${u.live}</td>
         <td class="hide">${when(u.created_at)}</td>
+        <td><form method="post" action="/admin/password"><input type="hidden" name="username" value="${esc(u.username)}"><input class="pw" name="password" type="password" placeholder="new password" minlength="${MIN_PASSWORD}" autocomplete="new-password"><button type="submit">Set</button></form></td>
         <td>${
           u.username === me.username
             ? '<span class="tag">you</span>'
@@ -313,7 +335,7 @@ function adminPage(me, users, sessions, msg) {
 <p class="sub">Signed in as ${esc(me.username)}. <a href="/">Back to the videos</a></p>
 ${msg && notes[msg] ? `<p class="note">${notes[msg]}</p>` : ''}
 <h2>People (${users.length})</h2>
-<table><thead><tr><th>Name</th><th>Status</th><th>Open sessions</th><th class="hide">Added</th><th></th></tr></thead><tbody>${userRows}</tbody></table>
+<table><thead><tr><th>Name</th><th>Status</th><th>Open sessions</th><th class="hide">Added</th><th>Password</th><th></th></tr></thead><tbody>${userRows}</tbody></table>
 <h2>Signed in now (${sessions.length})</h2>
 <table><thead><tr><th>Name</th><th class="hide">Address</th><th>Last seen</th><th class="hide">Expires</th><th></th></tr></thead><tbody>${
     sessionRows || '<tr><td colspan="5">Nobody is signed in.</td></tr>'
@@ -326,6 +348,49 @@ function blockedPage() {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Not allowed</title>
 <style>body{font:15px system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#0e1014;color:#eef0f4}</style>
 </head><body><div><h1>Not allowed</h1><p>This area is for the admin.</p><p><a style="color:#7aa7ff" href="/">Back</a></p></div></body></html>`;
+}
+
+const MIN_PASSWORD = 10;
+
+const q2 = {
+  byName: db.prepare('SELECT id, username, password_hash FROM users WHERE username = ?'),
+  byId: db.prepare('SELECT id, username, password_hash FROM users WHERE id = ?'),
+};
+
+function accountPage(user, msg, isError) {
+  const notes = {
+    ok: 'Password changed. Other browsers were signed out.',
+    bad: 'That is not your current password.',
+    short: `Use at least ${MIN_PASSWORD} characters.`,
+    mismatch: 'The two new passwords do not match.',
+    same: 'The new password is the same as the old one.',
+  };
+  const note = msg && notes[msg] ? `<p class="err${isError ? '' : ' ok'}">${notes[msg]}</p>` : '';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Account</title>
+<meta name="robots" content="noindex"><meta name="color-scheme" content="light dark">
+<style>${LOGIN_CSS}
+.card{width:100%;max-width:360px}
+.row{margin:0 0 12px}
+.err{margin:0 0 14px;padding:9px 11px;font-size:13px;border-radius:8px;color:#b42318;background:#fee4e2}
+.err.ok{color:#067647;background:#d1fadf}
+@media (prefers-color-scheme:dark){.err{color:#ffb4ab;background:#3b1512}.err.ok{color:#a6f4c5;background:#0b2e1d}}
+.back{font-size:13px;margin:0 0 18px}
+a{color:var(--accent);text-decoration:none}
+</style></head><body>
+<form class="card" method="post" action="/api/password">
+  <h1>Password</h1>
+  <p class="back">Signed in as ${esc(user.username)}. <a href="/">Back to the videos</a></p>
+  ${note}
+  <label for="current">Current password</label>
+  <input id="current" name="current" type="password" autocomplete="current-password" required>
+  <label for="next">New password</label>
+  <input id="next" name="next" type="password" autocomplete="new-password" minlength="${MIN_PASSWORD}" required>
+  <label for="again">New password again</label>
+  <input id="again" name="again" type="password" autocomplete="new-password" minlength="${MIN_PASSWORD}" required>
+  <button type="submit">Change password</button>
+</form>
+</body></html>`;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -417,6 +482,47 @@ const server = http.createServer(async (req, res) => {
       return send(json(200, { username: u.username, admin: !!u.is_admin }));
     }
 
+    if (url.pathname === '/account' && req.method === 'GET') {
+      const s = checkSession(cookies(req)[COOKIE]);
+      if (!s) return send({ status: 302, body: '', headers: { location: '/login?next=/account', 'cache-control': 'no-store' } });
+      const u = q2.byId.get(s.userId);
+      if (!u) return send({ status: 302, body: '', headers: { location: '/login', 'cache-control': 'no-store' } });
+      const code = url.searchParams.get('m') || '';
+      return send(page(200, accountPage(u, code, code === 'bad' || code === 'short' || code === 'mismatch' || code === 'same')));
+    }
+
+    if (url.pathname === '/api/password' && req.method === 'POST') {
+      const s = checkSession(cookies(req)[COOKIE]);
+      if (!s) return send({ status: 302, body: '', headers: { location: '/login?next=/account', 'cache-control': 'no-store' } });
+
+      const body = parseForm(await readBody(req), req.headers['content-type']);
+      const current = String(body.current || '');
+      const next = String(body.next || '');
+      const again = String(body.again || '');
+      const u = q2.byId.get(s.userId);
+
+      const back = (m) => send({ status: 303, body: '', headers: { location: '/account?m=' + m, 'cache-control': 'no-store' } });
+
+      if (!u || !current) return back('bad');
+      if (next.length < MIN_PASSWORD) return back('short');
+      if (next !== again) return back('mismatch');
+      if (next === current) return back('same');
+
+      let ok = false;
+      try {
+        ok = await argonVerify(u.password_hash, current, ARGON);
+      } catch {
+        ok = false;
+      }
+      if (!ok) return back('bad');
+
+      q.setPassword.run(await argonHash(next, ARGON), u.id);
+      // Keep this browser, drop every other session for this person.
+      q.delOtherSessions.run(u.id, s.sessionId);
+      cache.clear();
+      return back('ok');
+    }
+
     if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
       const s = checkSession(cookies(req)[COOKIE]);
       if (!s) return send({ status: 302, body: '', headers: { location: '/login?next=/admin', 'cache-control': 'no-store' } });
@@ -447,6 +553,21 @@ const server = http.createServer(async (req, res) => {
           if (off) q.delSessionsFor.run(target);
           cache.clear();
           return send({ status: 303, body: '', headers: { location: '/admin?m=' + (off ? 'disabled' : 'enabled'), 'cache-control': 'no-store' } });
+        }
+
+        if (url.pathname === '/admin/password' && body.username && body.password) {
+          const target = String(body.username).toLowerCase();
+          const pw = String(body.password);
+          if (pw.length < MIN_PASSWORD) {
+            return send({ status: 303, body: '', headers: { location: '/admin?m=pwshort', 'cache-control': 'no-store' } });
+          }
+          const hit = q2.byName.get(target);
+          if (!hit) return send({ status: 303, body: '', headers: { location: '/admin?m=nouser', 'cache-control': 'no-store' } });
+          q.setPasswordByName.run(await argonHash(pw, ARGON), target);
+          if (target === u.username) q.delOtherSessions.run(hit.id, s.sessionId);
+          else q.delAllSessions.run(hit.id);
+          cache.clear();
+          return send({ status: 303, body: '', headers: { location: '/admin?m=pw', 'cache-control': 'no-store' } });
         }
       }
 

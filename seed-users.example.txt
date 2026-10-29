@@ -1,0 +1,10 @@
+# Copy this to secrets/seed-users.txt, replace the names and passwords, then
+# start the stack once. The file is read one time, hashed, and never needed again.
+#
+# One person per line:  username password
+# Blank lines and lines starting with # are ignored.
+# Passwords need 10 characters or more.
+# The names listed in ADMIN_USERS in docker-compose.yml become admins.
+
+alice correct-horse-9
+bob battery-staple-7
