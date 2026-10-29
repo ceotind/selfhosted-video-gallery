@@ -1,0 +1,71 @@
+---
+import '../styles/app.css';
+const title = 'Video Library';
+const description = 'A very fast, self-hosted video gallery. Browse folders and watch MP4s in the browser.';
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex" />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script is:inline>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.dataset.theme = saved || (dark ? 'dark' : 'light');
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="brand" href="#" id="home">Video Library</a>
+      <input
+        id="q"
+        type="search"
+        class="search"
+        placeholder="Search this folder"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Search this folder"
+      />
+      <button id="theme" class="icon" type="button" aria-label="Switch theme" title="Switch theme">
+        <span class="t-light" aria-hidden="true">☾</span>
+        <span class="t-dark" aria-hidden="true">☀</span>
+      </button>
+    </header>
+
+    <nav id="crumbs" class="crumbs" aria-label="Breadcrumb" hidden></nav>
+
+    <main>
+      <p id="count" class="count"></p>
+      <div id="grid" class="grid"></div>
+      <p class="more-wrap"><button id="more" class="more" type="button" hidden>Load more</button></p>
+      <div id="sentinel" class="sentinel"></div>
+      <p id="empty" class="empty" hidden>Nothing here.</p>
+    </main>
+
+    <dialog id="player-dialog" class="dialog">
+      <div class="dialog-bar">
+        <span id="dialog-title" class="dialog-title"></span>
+        <button id="close" class="icon close" type="button" aria-label="Close">✕</button>
+      </div>
+      <video id="player" controls playsinline preload="metadata" controlslist="nodownload"></video>
+    </dialog>
+
+    <script>
+      import '../scripts/app.js';
+    </script>
+  </body>
+</html>

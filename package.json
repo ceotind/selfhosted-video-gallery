@@ -1,0 +1,16 @@
+{
+  "name": "selfhosted-video-gallery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A very fast, self-hosted video gallery. Point it at a folder of MP4s and watch them in the browser.",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "scan": "node scripts/scan.mjs ./videos ./data/meta"
+  },
+  "dependencies": {
+    "astro": "^5.16.0"
+  }
+}
