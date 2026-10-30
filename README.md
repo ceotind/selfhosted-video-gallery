@@ -14,6 +14,10 @@ One Docker container, one SQLite file, your own disk.</p>
   <img src="https://img.shields.io/badge/folders-per%20person-1a56ff" alt="Folder rules per person">
 </p>
 
+<p align="center">
+  <img src="docs/featured-image.webp" alt="A self-hosted video gallery for lesson libraries" width="100%" />
+</p>
+
 ## What this is
 
 A private video library that you host yourself. It reads a folder of videos from your disk and serves it as a fast website. People sign in, open folders, and watch in the browser.
@@ -21,6 +25,22 @@ A private video library that you host yourself. It reads a folder of videos from
 There is no upload step, no transcoding queue and no outside service. One Docker container, one SQLite file, and the video folder you already have.
 
 It suits dance studios, coaches, course sellers, gyms and clubs. Anywhere a library of lessons should only reach the people you invite.
+
+## Screenshots
+
+Screens from the running site, in the dark theme.
+
+<p>
+  <img src="docs/screenshot-1.png" alt="Self-hosted video gallery screen 1" width="100%" />
+</p>
+
+<p>
+  <img src="docs/screenshot-2.png" alt="Self-hosted video gallery screen 2" width="100%" />
+</p>
+
+<p>
+  <img src="docs/screenshot-3.png" alt="Self-hosted video gallery screen 3" width="100%" />
+</p>
 
 ## Why it is fast
 
