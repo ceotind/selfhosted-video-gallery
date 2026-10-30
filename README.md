@@ -1,10 +1,26 @@
-# selfhosted-video-gallery
+<p align="center">
+  <img src="public/logo.png" alt="Self-hosted video gallery logo" width="190" />
+</p>
 
-A very fast, self-hosted video gallery. Point it at a folder of MP4s, sign in, watch.
-No framework, no queue, no external service. One Docker container and one SQLite file.
+<h1 align="center">selfhosted-video-gallery</h1>
 
-Keywords: self-hosted video gallery, docker video library, lightweight video streaming site,
-browse mp4 files in browser, static video gallery, nginx video server, astro video gallery.
+<p align="center">Point it at a folder of videos. Sign in. Watch.<br>
+One Docker container, one SQLite file, your own disk.</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/docker-one%20container-1a56ff" alt="Runs as one Docker container">
+  <img src="https://img.shields.io/badge/page%20weight-12%20KB-111315" alt="About 12 KB per page">
+  <img src="https://img.shields.io/badge/folders-per%20person-1a56ff" alt="Folder rules per person">
+</p>
+
+## What this is
+
+A private video library that you host yourself. It reads a folder of videos from your disk and serves it as a fast website. People sign in, open folders, and watch in the browser.
+
+There is no upload step, no transcoding queue and no outside service. One Docker container, one SQLite file, and the video folder you already have.
+
+It suits dance studios, coaches, course sellers, gyms and clubs. Anywhere a library of lessons should only reach the people you invite.
 
 ## Why it is fast
 
@@ -15,19 +31,82 @@ browse mp4 files in browser, static video gallery, nginx video server, astro vid
 - Video plays from disk as a plain file with byte ranges. Seeking is instant.
 - One shared `<video>` element is created on click and destroyed on close. Phones keep their memory.
 
+## What you can do
+
+- Sign in with a name and a password. Passwords are stored as Argon2id hashes and never logged.
+- Show or hide any folder for any person, at any time, with no restart.
+- Add people from the admin page, set their password, or disable them.
+- See who is signed in right now, and sign one browser out.
+- Let people change their own password from the account page.
+- Keep every byte private. There is no public file link and no way to guess a URL.
+
 ## Quick start
 
-```sh
-git clone https://github.com/<you>/selfhosted-video-gallery.git
-cd selfhosted-video-gallery
+You need Docker and a folder of videos.
 
-# put videos anywhere, then point VIDEOS_DIR at that folder
+```sh
+git clone https://github.com/ceotind/selfhosted-video-gallery.git
+cd selfhosted-video-gallery
 VIDEOS_DIR=/srv/videos docker compose up -d --build
 ```
 
-Open http://localhost:8080.
+Open http://localhost:8080. Change the port in `docker-compose.yml` if 8080 is taken.
 
-Change the port in `docker-compose.yml` if 8080 is taken.
+The first start walks the folder and builds posters in the background. The site already serves while that runs.
+
+## First sign in
+
+1. Copy the template: `cp seed-users.example.txt secrets/seed-users.txt`
+2. Edit it, one person per line: `username password`
+3. Set `ADMIN_USERS` in `docker-compose.yml` to your own name.
+4. Start the stack. The file is read once, hashed, and never needed again.
+
+Add people later from the admin page.
+
+## Folder access
+
+Every person starts with nothing. You grant folders.
+
+- Open `/admin`, press Folders on a person, or open "everyone" for a rule that covers all people.
+- Every folder has three buttons: Show, Hide, Follow parent.
+- A rule covers the folder and every subfolder, including subfolders you add later.
+- The closest rule wins. A person's own rule beats the everyone rule at the same folder.
+- A new top-level folder stays hidden until you show it. A new folder inside a granted folder shows at once.
+- Admins always see every folder. A rule never hides anything from an admin.
+- A change takes effect on the next page load.
+- A hidden folder leaves the list, leaves the counts, and its videos answer "Not allowed".
+- Renaming or moving a folder on disk drops its rule. Set it again.
+- The buttons name the person they act on. "Show everything for kevin" changes kevin only.
+
+## Admin pages
+
+| Page | What it shows |
+|---|---|
+| `/admin` | One row per person, how many folders they see, and the actions |
+| `/admin/analytics` | Open sessions with a sign out per browser, plus counts for people, folders and videos |
+| `/admin/folders?u=name` | Every folder with Show, Hide and Follow parent, for one person or for everyone |
+
+- Add a person: type a name and a password on `/admin`, then press Add person.
+- Password: opens a small box, needs no old password, and signs that person out everywhere.
+- Disable: blocks the person and removes every session at once. You cannot disable yourself.
+- A person you add is not an admin. Admins come from `ADMIN_USERS`.
+- A search box filters the people list, and the folder list, as you type.
+
+## Configuration
+
+Set these in `.env` or in your compose file. Every one is optional.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `VIDEOS_DIR` | `./videos` | The folder that holds your videos |
+| `DATA_DIR` | `./data` | Database, folder index and posters |
+| `GALLERY_PORT` | `8080` | Port on the host |
+| `PUID` / `PGID` | `1000` | Owner of the files the app writes |
+| `ADMIN_USERS` | `dilshad` | Comma separated admin names |
+| `SESSION_DAYS` | `30` | How long a sign in lasts |
+| `POSTER_WORKERS` | `2` | Posters built at the same time |
+| `FOLDERS_OPEN` | unset | `1` shows every folder to everyone, for development |
+| `DEV_SKIP_SCAN` | unset | `1` skips the folder walk at start |
 
 ## Development
 
@@ -38,149 +117,60 @@ Change the port in `docker-compose.yml` if 8080 is taken.
 3. `scripts/dev-media.mjs` serves videos, posters and the index on port 4322.
 4. Astro serves the page with hot reload on port 4321.
 
-Open http://localhost:4321. Astro proxies `/api/`, `/login`, `/account`, `/admin`,
-`/v/`, `/p/` and `/m/` to the two local services.
-
 ```sh
 pnpm install
 cp .env.example .env      # set VIDEOS_DIR and DATA_DIR
 pnpm run dev
 ```
 
-- The command reads `.env`. `VIDEOS_DIR` defaults to `./videos` and `DATA_DIR` to `./data`.
-- Set `FOLDERS_OPEN=1` while developing. Every person then sees every folder until you hide
-  one, so the library is not empty on the first run. Production leaves it unset and starts closed.
-- Set `DEV_SKIP_SCAN=1` to start without walking the videos folder. Run `pnpm run scan`
-  when the videos change. A folder over the network can take two minutes to walk.
-- Log in with a user from `data/db/gallery.db`. A signed-out page sends you to the login.
+Open http://localhost:4321. Astro proxies `/api/`, `/login`, `/account`, `/admin`, `/v/`, `/p/` and `/m/` to the two local services.
+
 - Stop the Docker container first. Both want the same ports.
+- Set `FOLDERS_OPEN=1` while developing, so the library is not empty on the first run.
+- Set `DEV_SKIP_SCAN=1` to start without walking the videos folder. Run `pnpm run scan` when videos change.
+- A folder over the network can take two minutes to walk.
 - `pnpm run dev:web` starts Astro alone, without login or media. The gallery stays empty.
 - New videos get no poster until `scripts/posters.mjs` runs. Cards fall back to a glyph.
 
-## Deploy
+## How it works
 
-Build on the server and start it. The image is built from the source in that folder.
+1. `scripts/scan.mjs` walks the video folder at container start and writes `/m/tree.json` for the top level and `/m/f/<id>.json` for each subfolder. Each entry is about 45 bytes, so 2,000 videos make an 89 KB file.
+2. `scripts/posters.mjs` runs in the background. It writes one WebP poster per video and records the duration. The site serves while it works.
+3. A folder card never shows a blank tile. A folder with videos uses the poster of its first video. A folder with one child borrows that child's picture. A folder with several children gets a 4-up sheet at `data/posters/f-<folder id>.webp`. An empty folder keeps the glyph.
+4. nginx serves the site, the posters and the video bytes. The login service answers the folder list, because that list differs per person.
+5. The login service holds the folder list in memory and filters it per request, so a click costs a few milliseconds, not a disk read.
+
+## Data and backup
+
+- Everything the app writes sits in plain host folders under `DATA_DIR` (default `./data`). No Docker volume hides it.
+- `data/db/gallery.db` is the whole database: people, sessions, folder rules.
+- `data/posters/` holds one WebP per video. It rebuilds itself if you delete it.
+- `data/meta/` holds the folder index. It rebuilds on every start.
+- The container writes as `PUID:PGID`, so every file belongs to you. Set those from `id -u` and `id -g`.
+- SQLite keeps helper files beside the database. Copy the whole `data/db` folder, not only `gallery.db`.
+
+## Security
+
+- Every page, every poster and every video byte sits behind the login.
+- Sessions are random tokens, stored as hashes. Signing out deletes the row, so a copied cookie stops at once.
+- Rate limit: 8 failures per account, or 25 per address, inside 15 minutes.
+- A wrong password and an unknown name give the same message. The page never reveals which accounts exist.
+- Admin form posts are refused when the browser sends another site as the origin.
+- The site sends `noindex`, so search engines stay out.
+- Put a TLS proxy in front and send `X-Forwarded-Proto`. With `https`, the cookie gets the Secure flag and responses carry HSTS.
+
+## Deploy and update
 
 ```sh
-git clone https://github.com/<you>/selfhosted-video-gallery.git
+git clone https://github.com/ceotind/selfhosted-video-gallery.git
 cd selfhosted-video-gallery
 cp .env.example .env        # set VIDEOS_DIR, GALLERY_PORT, PUID and PGID
 docker compose up -d --build
 ```
 
-- To update: copy or pull the new source, then run the same command. It rebuilds and replaces
-  the container in one step. The index is rewritten at start, and missing posters fill in.
-- Source only. Do not copy `data/`, `secrets/` or `.env` between machines unless you want that
-  machine's logins and folder rules too. Every install keeps its own database.
-- The other install is not connected to this one. Two servers hold two separate databases.
-- Behind a proxy, send `X-Forwarded-Proto`. See HTTPS below.
-
-## How it works
-
-1. `scripts/scan.mjs` walks the video folder at container start and writes:
-   - `/m/tree.json` for the top level
-   - `/m/f/<id>.json` for each subfolder
-   Each video entry is about 45 bytes. 2,000 videos is an 89 KB file.
-   The login service reads these once, then builds a filtered copy per person.
-2. `scripts/posters.mjs` runs in the background. It writes one WebP poster per video and
-   records durations. The site is already serving while this runs.
-3. Folder cards get a picture too, never a blank tile:
-   - A folder with videos uses the poster of its first video.
-   - A folder with one child borrows that child's picture, so no new file is written.
-   - A folder with more than one child gets a 4-up sheet built from four evenly spaced
-     children, first, last and two in between. The sheet is `data/posters/f-<folder id>.webp`.
-   - An empty folder keeps the plain glyph.
-4. nginx serves the static site, the posters and the video files themselves. The login
-   service answers the folder list, because that list is different for each person.
-
-## Data folders
-
-- Everything the app writes is a plain folder on the host, under `DATA_DIR` (default `./data`).
-- `data/db/gallery.db` is the database, one SQLite file.
-- `data/posters/` holds one WebP poster per video. It rebuilds itself if deleted.
-- `data/meta/` holds the folder index. It rebuilds itself on every start.
-- No Docker volume is involved, so nothing hides inside Docker.
-- The container runs its writers as `PUID:PGID`, so every file belongs to you.
-  Set those in `.env` from `id -u` and `id -g`.
-- SQLite keeps two helper files beside the database. Copy the whole `data/db` folder,
-  not only `gallery.db`, or you can miss recent writes.
-
-## Logins
-
-- Every page, every poster and every video byte is behind the login. There is no public file link.
-- Every folder list and every video is also checked against that person's folders.
-- Users are read from `secrets/seed-users.txt` on the first start, then stored as Argon2id hashes in SQLite.
-- Format: one per line, `username password`. Blank lines and lines starting with `#` are skipped.
-- Passwords are never stored in plain text in the database, and no password is ever logged.
-- Change a password or add a person: edit the file, then run
-
-```sh
-docker compose exec gallery node /app/scripts/seed-users.mjs /data/seed/seed-users.txt
-```
-
-- `secrets/` is gitignored, dockerignored and mounted read only. Keep the file `chmod 600`.
-  Once the users exist, delete `secrets/seed-users.txt` from the server. The container does not need it again.
-- Sessions last 30 days. Change with `SESSION_DAYS`.
-- Signing out deletes the session row, so a copied cookie stops working at once.
-- Rate limit: 8 failures per account, or 25 per address, inside 15 minutes.
-- Wrong password and unknown username return the same message. The page does not reveal which accounts exist.
-
-## Passwords
-
-- Everyone changes their own password at `/account`, from the key icon in the header.
-- They must type the current password first. Minimum 10 characters.
-- Changing a password signs out every other browser for that person, and keeps the current one.
-- Admins set anyone's password from the Password column on `/admin`. No old password needed.
-- Setting someone's password signs that person out everywhere.
-
-## Admin
-
-- Set `ADMIN_USERS` in `docker-compose.yml`. Default is `dilshad`. Comma separate several names.
-- A template for the seed file sits at `seed-users.example.txt`. Copy it to `secrets/seed-users.txt`.
-- Admins see a gear in the header that opens `/admin`.
-- Three admin screens, all rendered by the login service:
-
-| Path | What it shows |
-|---|---|
-| `/admin` | One row per person, how many folders they see, and the actions |
-| `/admin/analytics` | Open sessions with a sign out per browser, plus counts for people, folders and videos |
-| `/admin/folders?u=name` | Every folder with Show, Hide and Follow parent, for one person or for everyone |
-
-- Actions on `/admin`: Folders, Password, Disable. Password opens a small box and needs no old
-  password. Disable signs the person out everywhere and blocks them until you enable them again.
-- Add a person from `/admin`: type a name and a password, then press Add person. The password is
-  hashed before it is stored, and the new person can sign in at once. Names use letters, numbers,
-  dot, dash or underscore.
-- A person you add is not an admin. Admins come from `ADMIN_USERS`.
-- A search box filters the people list, and the folder list, as you type.
-- An admin cannot disable their own account.
-- Everyone else gets a plain "not allowed" page naming the account they are signed in as.
-  The check runs on the server, not in the page.
-- Every admin form post is rejected when the `Origin` header names another site.
-
-## Folder access
-
-- Each person sees only the folders you grant. With no rule, they get an empty library.
-- Admins always see every folder. A rule never hides anything from an admin.
-- Open `/admin`, then the Folders link on a person, or "Set it for everyone at once".
-- Every folder has three buttons: Show, Hide, Follow parent.
-- A rule covers the folder and every subfolder, including subfolders added later.
-- The closest rule wins. A person's own rule beats the rule for everyone at the same folder.
-- A new top-level folder is hidden until you show it. A new folder inside a granted folder is visible at once.
-- A change takes effect on the next page load. No restart, no rebuild.
-- A hidden folder leaves the list, leaves the counts, and its videos answer "Not allowed".
-- Renaming or moving a folder on disk drops its rule. Set it again after the change.
-- Folder tile pictures are built from child folders, so a hidden child can still appear
-  inside the tile of a folder it was hidden from. The video itself stays blocked.
-- The login service holds the folder list in memory and filters it per request, so a
-  click costs a few milliseconds, not a disk read.
-
-## HTTPS
-
-- Put the container behind a TLS proxy and send `X-Forwarded-Proto`.
-- With `https`, the session cookie gets the `Secure` flag and responses carry HSTS.
-- With `http`, nginx answers 301 to the same URL on `https`.
-- With no header at all, nothing is forced, so local access over plain http still works.
+- To update: pull the new source, then run the same command. It rebuilds and replaces the container in one step.
+- Copy source only. Do not copy `data/`, `secrets/` or `.env` between machines unless you want that machine's logins and folder rules too.
+- Two installs hold two separate databases. Nothing syncs between them.
 
 ## Layout
 
@@ -202,11 +192,12 @@ docker-compose.yml      one service, host folders for data
 
 - Supported files: mp4, m4v, mov, webm, mkv, ogv.
 - Light and dark follow the operating system until someone flips the switch.
-- Every page sits behind the login. Put a TLS proxy in front if it faces the internet.
-- The site is `noindex`. Remove the robots meta tag in `index.astro` if you want it crawled.
 - Hiding the download button is cosmetic. A browser always receives the video bytes.
-- For smoothest seeking, run `ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4` once
-  on any file that was not written with the index at the front.
+- For smoothest seeking, run `ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4` once on a file that was not written with the index at the front.
+
+## Search terms
+
+People find this project looking for a self-hosted video gallery, a Docker video library, or a private video streaming server. Others want an MP4 browser player, a lightweight media server, or a simple Netflix-style library for their own files. It also suits dance studio video libraries, online course videos, and gym or club lesson archives that need per-person folder access. The stack is nginx, Node and SQLite, built with Astro. It runs on a small VPS, a home server or a Raspberry Pi.
 
 ## License
 
