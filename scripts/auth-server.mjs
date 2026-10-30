@@ -525,7 +525,46 @@ tr[hidden]{display:none}
 .figure span{font-size:14px;color:var(--muted)}
 .census{display:flex;flex-wrap:wrap;gap:4px 24px;margin:0 0 8px;padding:0;list-style:none;font-size:13px;color:var(--muted)}
 .census b{color:var(--fg);font-weight:650;font-variant-numeric:tabular-nums}
-@media(max-width:700px){td.hide,th.hide{display:none}body{padding:16px 14px 56px}th,td{padding:10px 10px 10px 0;font-size:13px}.btn,button{min-height:44px}.actions form{margin:0 4px 4px 0}}
+@media(max-width:700px){
+  body{padding:18px 14px 64px}
+  h1{font-size:26px}
+  p.sub{margin-bottom:16px;font-size:13px}
+  h2{margin:22px 0 10px;padding-top:12px}
+  .chips{gap:2px 14px;font-size:12.5px;margin-bottom:16px}
+  .chip+.chip::before{margin-right:14px}
+  .figure{margin:18px 0 8px;gap:10px}
+  .figure b{font-size:44px}
+  .census{gap:2px 16px;margin-bottom:6px}
+  .whoswitch{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .whoswitch::-webkit-scrollbar{display:none}
+  .whoswitch a{white-space:nowrap}
+  .quick{margin-bottom:14px}
+  .quick .btn{flex:1 1 40%}
+  .sticky{padding:10px 0}
+  .search{flex:1 1 100%}
+  .hint,.help{font-size:12.5px}
+  .note{font-size:13px;padding:10px 12px}
+  table,tbody,tr,td{display:block;width:auto}
+  thead{display:none}
+  tbody tr{border-bottom:1px solid var(--line);padding:14px 0}
+  tbody tr:first-child{border-top:1px solid var(--line)}
+  tbody tr:hover{background:none}
+  td{border:0;padding:0;margin:0 0 10px;font-size:13.5px}
+  td:last-child{margin-bottom:0}
+  td:empty{display:none}
+  td.hide{display:none}
+  td[data-label]::before{content:attr(data-label) ": ";color:var(--muted)}
+  td.who{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  td.who .nm{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+  .actions{display:flex;flex-wrap:wrap;gap:8px;margin:0}
+  .actions>*{flex:1 1 0;min-width:0}
+  .actions form{display:flex;margin:0}
+  .actions .btn,.actions button,.actions summary{width:100%;min-height:44px;font-size:13.5px;padding:0 8px}
+  .pop summary{display:flex}
+  .pop[open]{flex:1 1 100%}
+  .pwpop{width:100%;margin-top:8px}
+  input.pw{flex:1 1 auto;width:auto;min-width:0}
+}
 `;
 
 // How many folders a person can see, in plain words, for the people list.
@@ -536,7 +575,7 @@ function accessText(u) {
   const total = meta.folderPath.size;
   let shown = 0;
   for (const p of meta.folderPath.values()) if (visibleTo(p, rules)) shown++;
-  if (shown === total) return `All ${total} folders`;
+  if (shown === total) return `All ${total} folder${total === 1 ? '' : 's'}`;
   if (shown === 0) return 'No folders';
   return `${shown} of ${total} folders`;
 }
@@ -577,7 +616,7 @@ function adminPage(me, users, sessions, msg) {
 
       return `<tr data-name="${esc(u.username)}">
         <td class="who"><span class="av">${esc(u.username.slice(0, 2).toUpperCase())}</span><span class="nm">${esc(u.username)} ${tags}</span></td>
-        <td class="hide">${esc(accessText(u))}</td>
+        <td data-label="Sees">${esc(accessText(u))}</td>
         <td class="actions">
           <a class="btn" href="/admin/folders?u=${encodeURIComponent(u.username)}">Folders</a>
           ${pw}${toggle}
@@ -651,7 +690,7 @@ function analyticsPage(me, users, sessions, seenByUser, stats) {
       (s) => `<tr>
         <td class="who"><span class="av">${esc(s.username.slice(0, 2).toUpperCase())}</span><span class="nm">${esc(s.username)}</span></td>
         <td class="hide">${esc(s.ip || '-')}</td>
-        <td>${when(s.last_seen)}</td>
+        <td data-label="Last seen">${when(s.last_seen)}</td>
         <td class="hide">${when(s.expires_at)}</td>
         <td class="actions"><form method="post" action="/admin/revoke"><input type="hidden" name="id" value="${s.id}"><button class="btn danger" type="submit">Sign out</button></form></td>
       </tr>`
@@ -666,10 +705,10 @@ function analyticsPage(me, users, sessions, seenByUser, stats) {
         .trim();
       return `<tr>
         <td class="who"><span class="av">${esc(u.username.slice(0, 2).toUpperCase())}</span><span class="nm">${esc(u.username)} ${tags}</span></td>
-        <td class="num">${u.live || 0}</td>
+        <td class="num" data-label="Signed in">${u.live || 0}</td>
         <td class="num hide">${seen ? seen.n : 0}</td>
-        <td>${seen ? when(seen.seen) : 'never'}</td>
-        <td class="hide">${esc(accessText(u))}</td>
+        <td data-label="Last seen">${seen ? when(seen.seen) : 'never'}</td>
+        <td data-label="Sees">${esc(accessText(u))}</td>
       </tr>`;
     })
     .join('');
