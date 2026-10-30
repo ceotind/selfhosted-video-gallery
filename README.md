@@ -1,7 +1,7 @@
 # selfhosted-video-gallery
 
-A very fast, self-hosted video gallery. Point it at a folder of MP4s, open the browser, watch.
-No database, no accounts, no queue, no JavaScript framework. One Docker container.
+A very fast, self-hosted video gallery. Point it at a folder of MP4s, sign in, watch.
+No framework, no queue, no external service. One Docker container and one SQLite file.
 
 Keywords: self-hosted video gallery, docker video library, lightweight video streaming site,
 browse mp4 files in browser, static video gallery, nginx video server, astro video gallery.
@@ -29,15 +29,69 @@ Open http://localhost:8080.
 
 Change the port in `docker-compose.yml` if 8080 is taken.
 
+## Development
+
+`pnpm run dev` starts all four pieces on your machine:
+
+1. `scripts/scan.mjs` rebuilds the folder index from `VIDEOS_DIR`.
+2. `scripts/auth-server.mjs` serves login, logout, `/account` and `/admin` on port 9000.
+3. `scripts/dev-media.mjs` serves videos, posters and the index on port 4322.
+4. Astro serves the page with hot reload on port 4321.
+
+Open http://localhost:4321. Astro proxies `/api/`, `/login`, `/account`, `/admin`,
+`/v/`, `/p/` and `/m/` to the two local services.
+
+```sh
+pnpm install
+cp .env.example .env      # set VIDEOS_DIR and DATA_DIR
+pnpm run dev
+```
+
+- The command reads `.env`. `VIDEOS_DIR` defaults to `./videos` and `DATA_DIR` to `./data`.
+- Set `FOLDERS_OPEN=1` while developing. Every person then sees every folder until you hide
+  one, so the library is not empty on the first run. Production leaves it unset and starts closed.
+- Set `DEV_SKIP_SCAN=1` to start without walking the videos folder. Run `pnpm run scan`
+  when the videos change. A folder over the network can take two minutes to walk.
+- Log in with a user from `data/db/gallery.db`. A signed-out page sends you to the login.
+- Stop the Docker container first. Both want the same ports.
+- `pnpm run dev:web` starts Astro alone, without login or media. The gallery stays empty.
+- New videos get no poster until `scripts/posters.mjs` runs. Cards fall back to a glyph.
+
+## Deploy
+
+Build on the server and start it. The image is built from the source in that folder.
+
+```sh
+git clone https://github.com/<you>/selfhosted-video-gallery.git
+cd selfhosted-video-gallery
+cp .env.example .env        # set VIDEOS_DIR, GALLERY_PORT, PUID and PGID
+docker compose up -d --build
+```
+
+- To update: copy or pull the new source, then run the same command. It rebuilds and replaces
+  the container in one step. The index is rewritten at start, and missing posters fill in.
+- Source only. Do not copy `data/`, `secrets/` or `.env` between machines unless you want that
+  machine's logins and folder rules too. Every install keeps its own database.
+- The other install is not connected to this one. Two servers hold two separate databases.
+- Behind a proxy, send `X-Forwarded-Proto`. See HTTPS below.
+
 ## How it works
 
 1. `scripts/scan.mjs` walks the video folder at container start and writes:
    - `/m/tree.json` for the top level
    - `/m/f/<id>.json` for each subfolder
    Each video entry is about 45 bytes. 2,000 videos is an 89 KB file.
+   The login service reads these once, then builds a filtered copy per person.
 2. `scripts/posters.mjs` runs in the background. It writes one WebP poster per video and
    records durations. The site is already serving while this runs.
-3. nginx serves the static site, the posters, the index and the video files themselves.
+3. Folder cards get a picture too, never a blank tile:
+   - A folder with videos uses the poster of its first video.
+   - A folder with one child borrows that child's picture, so no new file is written.
+   - A folder with more than one child gets a 4-up sheet built from four evenly spaced
+     children, first, last and two in between. The sheet is `data/posters/f-<folder id>.webp`.
+   - An empty folder keeps the plain glyph.
+4. nginx serves the static site, the posters and the video files themselves. The login
+   service answers the folder list, because that list is different for each person.
 
 ## Data folders
 
@@ -54,6 +108,7 @@ Change the port in `docker-compose.yml` if 8080 is taken.
 ## Logins
 
 - Every page, every poster and every video byte is behind the login. There is no public file link.
+- Every folder list and every video is also checked against that person's folders.
 - Users are read from `secrets/seed-users.txt` on the first start, then stored as Argon2id hashes in SQLite.
 - Format: one per line, `username password`. Blank lines and lines starting with `#` are skipped.
 - Passwords are never stored in plain text in the database, and no password is ever logged.
@@ -83,11 +138,38 @@ docker compose exec gallery node /app/scripts/seed-users.mjs /data/seed/seed-use
 - Set `ADMIN_USERS` in `docker-compose.yml`. Default is `dilshad`. Comma separate several names.
 - A template for the seed file sits at `seed-users.example.txt`. Copy it to `secrets/seed-users.txt`.
 - Admins see a gear in the header that opens `/admin`.
-- The admin page lists every person, their open sessions, the address and the last time seen.
-- It can sign one browser out, or disable a person. Disabling removes all their sessions at once.
+- Three admin screens, all rendered by the login service:
+
+| Path | What it shows |
+|---|---|
+| `/admin` | One row per person, how many folders they see, and the actions |
+| `/admin/analytics` | Open sessions with a sign out per browser, plus counts for people, folders and videos |
+| `/admin/folders?u=name` | Every folder with Show, Hide and Follow parent, for one person or for everyone |
+
+- Actions on `/admin`: Folders, Password, Disable. Password opens a small box and needs no old
+  password. Disable signs the person out everywhere and blocks them until you enable them again.
+- A search box filters the people list, and the folder list, as you type.
 - An admin cannot disable their own account.
-- Everyone else gets a plain "not allowed" page. The check runs on the server, not in the page.
-- Every admin form post is rejected when the `Origin` header is another site.
+- Everyone else gets a plain "not allowed" page naming the account they are signed in as.
+  The check runs on the server, not in the page.
+- Every admin form post is rejected when the `Origin` header names another site.
+
+## Folder access
+
+- Each person sees only the folders you grant. With no rule, they get an empty library.
+- Admins always see every folder. A rule never hides anything from an admin.
+- Open `/admin`, then the Folders link on a person, or "Set it for everyone at once".
+- Every folder has three buttons: Show, Hide, Follow parent.
+- A rule covers the folder and every subfolder, including subfolders added later.
+- The closest rule wins. A person's own rule beats the rule for everyone at the same folder.
+- A new top-level folder is hidden until you show it. A new folder inside a granted folder is visible at once.
+- A change takes effect on the next page load. No restart, no rebuild.
+- A hidden folder leaves the list, leaves the counts, and its videos answer "Not allowed".
+- Renaming or moving a folder on disk drops its rule. Set it again after the change.
+- Folder tile pictures are built from child folders, so a hidden child can still appear
+  inside the tile of a folder it was hidden from. The video itself stays blocked.
+- The login service holds the folder list in memory and filters it per request, so a
+  click costs a few milliseconds, not a disk read.
 
 ## HTTPS
 
@@ -102,16 +184,21 @@ docker compose exec gallery node /app/scripts/seed-users.mjs /data/seed/seed-use
 src/pages/index.astro   the whole page shell
 src/styles/app.css      light and dark theme in CSS variables
 src/scripts/app.js      gallery, search, breadcrumbs, player overlay
+scripts/auth-server.mjs login, sessions, folder rules, admin screens
 scripts/scan.mjs        folder index builder
 scripts/posters.mjs     poster and duration worker
+scripts/seed-users.mjs  creates or updates logins from a plain text list
+scripts/dev.mjs         one command for local development
+scripts/dev-media.mjs   local stand-in for the nginx media routes
 docker/nginx.conf       caching, gzip, byte ranges
+docker-compose.yml      one service, host folders for data
 ```
 
 ## Notes
 
 - Supported files: mp4, m4v, mov, webm, mkv, ogv.
 - Light and dark follow the operating system until someone flips the switch.
-- There is no login. Put this behind your own proxy or auth if the library is private.
+- Every page sits behind the login. Put a TLS proxy in front if it faces the internet.
 - The site is `noindex`. Remove the robots meta tag in `index.astro` if you want it crawled.
 - Hiding the download button is cosmetic. A browser always receives the video bytes.
 - For smoothest seeking, run `ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4` once

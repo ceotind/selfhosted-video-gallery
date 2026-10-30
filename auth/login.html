@@ -2,104 +2,222 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Sign in</title>
     <meta name="robots" content="noindex" />
     <meta name="color-scheme" content="light dark" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#08090b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/video-library.png" />
     <style>
       :root {
         --bg: #ffffff;
-        --fg: #14161a;
-        --muted: #5f6672;
-        --card: #f4f5f7;
-        --line: #e3e5e9;
-        --accent: #1f6feb;
+        --panel: #f3f4f6;
+        --panel-2: #e9ebef;
+        --fg: #0a0b0d;
+        --muted: #5c6470;
+        --line: #e4e6ea;
+        --hot: #1a56ff;
+        --hot-soft: rgba(26, 86, 255, 0.14);
+        --cta: #1a56ff;
+        --cta-fg: #ffffff;
+        --radius: 18px;
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #0e1014;
-          --fg: #eef0f4;
-          --muted: #97a0ad;
-          --card: #171a20;
-          --line: #242a33;
-          --accent: #7aa7ff;
+          --bg: #08090b;
+          --panel: #111318;
+          --panel-2: #171a21;
+          --fg: #f4f6f9;
+          --muted: #98a1af;
+          --line: #22262e;
+          --hot: #5b9cff;
+          --hot-soft: rgba(91, 156, 255, 0.2);
+          --cta: #2f6bff;
+          --cta-fg: #ffffff;
         }
       }
       * { box-sizing: border-box; }
+      html, body { height: 100%; }
       body {
-        display: grid;
-        place-items: center;
-        min-height: 100vh;
         margin: 0;
-        padding: 20px;
+        min-height: 100dvh;
         background: var(--bg);
         color: var(--fg);
-        font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font: 16px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Full screen, two halves on wide screens, one on phones. */
+      .wrap {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        min-height: 100dvh;
+        width: 100%;
+      }
+
+      .pitch {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 24px;
+        padding: clamp(22px, 3.4vw, 64px);
+        overflow: hidden;
+        background:
+          radial-gradient(120% 90% at 0% 0%, var(--hot-soft), transparent 55%),
+          var(--panel);
+        border-right: 1px solid var(--line);
+      }
+      .markrow {
+        display: flex;
+        align-items: center;
+        gap: clamp(10px, 1vw, 16px);
+      }
+      .markrow img {
+        display: block;
+        width: auto;
+        height: clamp(36px, 3.2vw, 52px);
+        border-radius: 12px;
+      }
+      .mark {
+        font-size: clamp(11px, 0.8vw, 13px);
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .pitch h1 {
+        margin: 0;
+        font-size: clamp(44px, 8.2vw, 132px);
+        font-weight: 850;
+        line-height: 0.86;
+        letter-spacing: -0.045em;
+        text-transform: uppercase;
+      }
+      .pitch h1 span {
+        display: block;
+        color: var(--hot);
+      }
+      .lede {
+        margin: 0;
+        max-width: 34ch;
+        font-size: clamp(14px, 1.15vw, 19px);
+        color: var(--muted);
+      }
+
+      .side {
+        display: grid;
+        place-items: center;
+        padding: clamp(20px, 3vw, 56px);
       }
       form {
         width: 100%;
-        max-width: 330px;
+        max-width: 400px;
       }
-      h1 {
-        margin: 0 0 18px;
-        font-size: 19px;
-        font-weight: 650;
-      }
+      .field { margin: 0 0 16px; }
       label {
         display: block;
-        margin: 0 0 6px;
-        font-size: 12px;
+        margin: 0 0 7px;
+        font-size: clamp(10px, 0.75vw, 12px);
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
         color: var(--muted);
       }
       input {
         width: 100%;
-        margin: 0 0 14px;
-        padding: 11px 12px;
+        height: clamp(46px, 3.8vw, 54px);
+        padding: 0 16px;
         font: inherit;
+        font-size: clamp(15px, 1vw, 17px);
         color: var(--fg);
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 9px;
+        background: var(--panel);
+        border: 1px solid transparent;
+        border-radius: var(--radius);
         outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
       }
-      input:focus { border-color: var(--accent); }
+      input:focus {
+        background: var(--bg);
+        border-color: var(--hot);
+        box-shadow: 0 0 0 4px var(--hot-soft);
+      }
       button {
         width: 100%;
-        padding: 11px 14px;
+        height: clamp(48px, 4vw, 56px);
+        margin-top: 6px;
         font: inherit;
-        font-weight: 600;
-        color: #fff;
-        background: var(--accent);
+        font-size: clamp(14px, 1vw, 16px);
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--cta-fg);
+        background: var(--cta);
         border: 0;
-        border-radius: 9px;
+        border-radius: var(--radius);
         cursor: pointer;
+        transition: filter 0.15s ease, transform 0.1s ease;
       }
+      button:hover { filter: brightness(1.08); }
       button:active { transform: translateY(1px); }
       .err {
-        margin: 0 0 14px;
-        padding: 9px 11px;
-        font-size: 13px;
+        margin: 0 0 18px;
+        padding: 12px 15px;
+        font-size: clamp(13px, 0.9vw, 14px);
+        font-weight: 600;
         color: #b42318;
         background: #fee4e2;
-        border-radius: 8px;
+        border-radius: 14px;
       }
+      .err p { margin: 0; }
       @media (prefers-color-scheme: dark) {
         .err { color: #ffb4ab; background: #3b1512; }
+      }
+
+      @media (max-width: 860px) {
+        .wrap { grid-template-columns: 1fr; }
+        .pitch {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          gap: 14px;
+          padding: 26px 22px 30px;
+        }
+        .pitch h1 { font-size: clamp(38px, 13vw, 64px); }
+        .lede { display: none; }
+        .side { align-items: start; padding: 26px 22px 40px; }
+        form { max-width: none; }
       }
     </style>
   </head>
   <body>
-    <form method="post" action="/api/login" autocomplete="on">
-      <h1>Sign in</h1>
-      {{ERROR}}
-      <label for="username">Username</label>
-      <input id="username" name="username" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus />
-      <label for="password">Password</label>
-      <input id="password" name="password" type="password" required />
-      <input type="hidden" name="next" value="/" />
-      <button type="submit">Sign in</button>
-    </form>
+    <div class="wrap">
+      <section class="pitch">
+        <div class="markrow">
+          <img src="/video-library-64.png" alt="Video Library" width="48" height="48" />
+          <span class="mark">Private library</span>
+        </div>
+        <h1>Video<span>Library</span></h1>
+        <p class="lede">Sign in to watch. Every folder is checked against your account.</p>
+      </section>
+
+      <section class="side">
+        <form method="post" action="/api/login" autocomplete="on">
+          {{ERROR}}
+          <div class="field">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required />
+          </div>
+          <input type="hidden" name="next" value="/" />
+          <button type="submit">Sign in</button>
+        </form>
+      </section>
+    </div>
     <script>
       // Keep the page the person asked for, so a shared link lands where they meant it.
       var n = new URLSearchParams(location.search).get('next');

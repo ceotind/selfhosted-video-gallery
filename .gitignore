@@ -10,6 +10,9 @@ data
 .DS_Store
 secrets/
 seed-users.txt
+# Local deploy script, for Dilshad only. Never commit it.
+deploy.sh
+.deploy-info
 *.db
 *.db-wal
 *.db-shm

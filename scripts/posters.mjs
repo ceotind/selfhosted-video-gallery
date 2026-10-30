@@ -59,11 +59,20 @@ async function makePoster(file, out) {
     '-c:v', 'libwebp', '-quality', '75', '-compression_level', '4',
     tmp,
   ];
-  if (await run('ffmpeg', args(true))) {
+  // A seek past the end exits 0 and leaves an 8 byte stub, so check the size.
+  const usable = async () => {
+    try {
+      const st = await fs.stat(tmp);
+      if (st.size > 100) return true;
+    } catch {}
+    await fs.rm(tmp, { force: true });
+    return false;
+  };
+  if (await run('ffmpeg', args(true)) && (await usable())) {
     await fs.rename(tmp, out);
     return true;
   }
-  if (await run('ffmpeg', args(false))) {
+  if (await run('ffmpeg', args(false)) && (await usable())) {
     await fs.rename(tmp, out);
     return true;
   }
@@ -116,3 +125,91 @@ async function worker() {
 await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 await saveDurations(true);
 console.log(`[posters] done, ${done} processed`);
+
+// ---------------------------------------------------------------------------
+// Folder sheets. A folder that holds only subfolders gets one picture built from
+// up to four of its children, so a parent card is not blank. Runs after the video
+// posters, deepest folder first, so a child sheet exists before its parent uses it.
+// ---------------------------------------------------------------------------
+
+const evenPick = (arr, want) => {
+  if (arr.length <= want) return [...arr];
+  const out = [];
+  for (let i = 0; i < want; i++) out.push(arr[Math.round((i * (arr.length - 1)) / (want - 1))]);
+  return [...new Set(out)];
+};
+
+async function makeSheet(files, out) {
+  const n = files.length;
+  const cols = n === 4 ? 2 : n;
+  const rows = Math.ceil(n / cols);
+  const w = Math.round(480 / cols);
+  const h = Math.round(270 / rows);
+  const scale = files
+    .map((_, i) => `[${i}:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h}[s${i}]`)
+    .join(';');
+  const tags = files.map((_, i) => `[s${i}]`).join('');
+  const layout = files.map((_, i) => `${(i % cols) * w}_${Math.floor(i / cols) * h}`).join('|');
+  const tmp = out + '.part.webp';
+  const args = ['-y', '-loglevel', 'error'];
+  for (const f of files) args.push('-i', f);
+  args.push(
+    '-filter_complex', `${scale};${tags}xstack=inputs=${n}:layout=${layout}`,
+    '-frames:v', '1', '-c:v', 'libwebp', '-quality', '80', '-compression_level', '4',
+    tmp
+  );
+  if (!(await run('ffmpeg', args))) {
+    await fs.rm(tmp, { force: true });
+    return false;
+  }
+  await fs.rename(tmp, out);
+  return true;
+}
+
+async function buildSheets() {
+  let names = [];
+  try {
+    names = await fs.readdir(path.join(metaDir, 'f'));
+  } catch {
+    return;
+  }
+  const nodes = [];
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    try {
+      nodes.push(JSON.parse(await fs.readFile(path.join(metaDir, 'f', name), 'utf8')));
+    } catch {}
+  }
+
+  const parents = nodes
+    .filter((n) => (n.videos || []).length === 0 && (n.folders || []).length > 1)
+    .sort((a, b) => (b.path || []).length - (a.path || []).length);
+
+  let made = 0;
+  for (const node of parents) {
+    const out = path.join(posterDir, `f-${node.id}.webp`);
+    try {
+      await fs.access(out);
+      continue;
+    } catch {}
+
+    const picks = evenPick(node.folders.map((f) => f.p).filter(Boolean), 4);
+    const files = [];
+    for (const p of picks) {
+      const file = path.join(posterDir, `${p}.webp`);
+      try {
+        await fs.access(file);
+        files.push(file);
+      } catch {}
+    }
+    if (files.length < 2) {
+      console.log(`[posters] no sheet for ${node.name}, only ${files.length} child picture(s)`);
+      continue;
+    }
+    if (await makeSheet(files, out)) made++;
+  }
+  console.log(`[posters] folder sheets ${made}/${parents.length}`);
+}
+
+await buildSheets();
+

@@ -20,6 +20,7 @@ const state = {
   q: '',
   shown: PAGE,
   durations: {},
+  note: '',
 };
 
 const esc = (s) =>
@@ -36,21 +37,50 @@ const fmt = (sec) => {
 
 const fileUrl = (p) => '/v/' + p.split('/').map(encodeURIComponent).join('/');
 
+// The session can end while the page is open. Behind the web server that shows as
+// a redirect, which the browser hides; in dev it shows as a plain 401.
+function goLogin() {
+  const here = location.pathname + location.search;
+  location.href = '/login?next=' + encodeURIComponent(here);
+  throw new Error('not signed in');
+}
+
 async function getJSON(url) {
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
+  const res = await fetch(url, { headers: { accept: 'application/json' }, redirect: 'manual' });
+  if (res.status === 401 || res.type === 'opaqueredirect') return goLogin();
   if (!res.ok) throw new Error(url + ' ' + res.status);
   return res.json();
+}
+
+// A folder someone is no longer allowed to open reads as an empty folder.
+async function folderData(id) {
+  const url = id === 'root' || !id ? '/m/tree.json' : `/m/f/${id}.json`;
+  try {
+    return await getJSON(url);
+  } catch (e) {
+    if (/\s403$/.test(String(e.message))) {
+      state.note = 'That folder is not available.';
+      return { folders: [], videos: [], path: [] };
+    }
+    throw e;
+  }
 }
 
 function matches(name) {
   return !state.q || name.toLowerCase().includes(state.q);
 }
 
-function cardFolder(f) {
+function cardFolder(f, i) {
+  const eager = i < 8;
+  const pic = f.p
+    ? `<img src="/p/${esc(f.p)}.webp" alt="" loading="${eager ? 'eager' : 'lazy'}" ${eager ? 'fetchpriority="high"' : ''} decoding="async" width="480" height="270" onerror="this.remove()">`
+    : '';
+  // A folder is marked at a glance: a folder icon and a count, top left.
   return `<a class="card" href="?f=${f.id}" data-folder="${f.id}">
     <div class="thumb">
       <div class="glyph" aria-hidden="true">▣</div>
-      <span class="count-badge">${f.count}</span>
+      ${pic}
+      <span class="count-badge"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.6 4.2h4.1l1.3 1.7h7.4v6.5a1 1 0 0 1-1 1H2.6a1 1 0 0 1-1-1z"/></svg>${f.count}</span>
     </div>
     <span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
   </a>`;
@@ -99,6 +129,7 @@ function render() {
   count.textContent = state.q
     ? `${total} match${total === 1 ? '' : 'es'}`
     : `${folders.length} folder${folders.length === 1 ? '' : 's'} · ${videos.length} video${videos.length === 1 ? '' : 's'}`;
+  empty.textContent = state.note || 'Nothing here.';
   empty.hidden = total > 0;
   const hasMore = videos.length > state.shown;
   more.hidden = !hasMore;
@@ -109,10 +140,11 @@ function render() {
 async function openFolder(id) {
   state.folder = id;
   state.q = '';
+  state.note = '';
   search.value = '';
   state.shown = PAGE;
 
-  const data = id === 'root' || !id ? await getJSON('/m/tree.json') : await getJSON(`/m/f/${id}.json`);
+  const data = await folderData(id);
   state.folders = data.folders || [];
   state.videos = data.videos || [];
   state.path = data.path || [];
@@ -228,11 +260,11 @@ new IntersectionObserver(
 
 window.addEventListener('popstate', () => {
   const id = new URLSearchParams(location.search).get('f') || 'root';
-  openFolderSilent(id);
+  openFolderSilent(id).catch(() => {});
 });
 
 async function openFolderSilent(id) {
-  const data = id === 'root' ? await getJSON('/m/tree.json') : await getJSON(`/m/f/${id}.json`);
+  const data = await folderData(id);
   state.folder = id;
   state.folders = data.folders || [];
   state.videos = data.videos || [];
@@ -246,8 +278,15 @@ async function openFolderSilent(id) {
   try {
     state.durations = await getJSON('/m/durations.json');
   } catch {}
+
   const id = new URLSearchParams(location.search).get('f') || 'root';
-  await openFolderSilent(id);
+  // A signed-out visitor is sent to the login page from inside getJSON.
+  try {
+    await openFolderSilent(id);
+  } catch (e) {
+    empty.textContent = 'The library could not be read. Reload the page.';
+    empty.hidden = false;
+  }
 
   // Show the admin link only for admins.
   try {

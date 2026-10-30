@@ -5,12 +5,16 @@
   "description": "A very fast, self-hosted video gallery. Point it at a folder of MP4s and watch them in the browser.",
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:web": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "scan": "node scripts/scan.mjs ./videos ./data/meta"
+    "scan": "node --env-file-if-exists=.env scripts/scan.mjs"
   },
   "dependencies": {
     "astro": "^5.16.0"
+  },
+  "devDependencies": {
+    "@node-rs/argon2": "^2.2.2"
   }
 }
