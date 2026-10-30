@@ -834,10 +834,16 @@ ${
 }
 
 <div class="quick">
-  ${post('', 'show', 'Show everything', 'primary')}
-  ${post('', 'hide', 'Hide everything')}
-  ${setHere ? post('', 'reset', 'Remove all rules', 'danger') : ''}
+  ${post('', 'show', `Show everything for ${label}`, 'primary')}
+  ${post('', 'hide', `Hide everything for ${label}`)}
+  ${setHere ? post('', 'reset', `Remove rules for ${label}`, 'danger') : ''}
 </div>
+
+<p class="hint">${
+    target
+      ? `These buttons and rules change what ${label} sees. Open "everyone" above to change it for all people at once.`
+      : 'These rules are the default for every person. A person can still have their own rule on top.'
+  }</p>
 
 <div class="sticky">
   <input class="search" id="folder-q" type="search" placeholder="Find a folder" autocomplete="off" spellcheck="false">
