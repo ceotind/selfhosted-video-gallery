@@ -296,6 +296,7 @@ const q = {
   delOtherSessions: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id <> ?'),
   delAllSessions: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
   lastSeen: db.prepare('SELECT user_id, MAX(last_seen) AS seen, COUNT(*) AS n FROM sessions GROUP BY user_id'),
+  createUser: db.prepare('INSERT INTO users (username, password_hash, active, created_at) VALUES (?, ?, 1, ?)'),
 };
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -492,6 +493,8 @@ td form{display:inline;margin:0}
 .whoswitch a:hover{color:var(--fg);border-color:var(--line-2);background:var(--panel)}
 .whoswitch a.on{color:var(--fg);font-weight:650;background:var(--panel);border-color:var(--line)}
 input.pw{width:180px;min-height:36px;padding:0 12px;font:inherit;font-size:13.5px;color:var(--fg);background:var(--bg);border:1px solid var(--line-2);border-radius:var(--r)}
+.newuser{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.newuser input.pw{flex:1 1 200px;width:auto}
 .tag{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted)}
 .tag::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.7}
 .tag.t-hot{color:var(--hot);background:transparent;border-color:color-mix(in srgb,var(--hot) 28%,transparent)}
@@ -540,6 +543,8 @@ tr[hidden]{display:none}
   .whoswitch a{white-space:nowrap}
   .quick{margin-bottom:14px}
   .quick .btn{flex:1 1 40%}
+  .newuser>*{flex:1 1 100%}
+  .newuser input.pw{min-height:44px;font-size:16px}
   .sticky{padding:10px 0}
   .search{flex:1 1 100%}
   .hint,.help{font-size:12.5px}
@@ -588,6 +593,9 @@ function adminPage(me, users, sessions, msg) {
     signout: 'Signed out everywhere. They must sign in again.',
     self: 'You cannot do that to your own account.',
     pw: 'Password set. Their other sessions are signed out.',
+    created: 'Person added. Set their folders when you are ready.',
+    exists: 'That name is already taken.',
+    badname: 'Names use letters, numbers, dot, dash or underscore, 2 to 32 characters.',
     pwshort: `Passwords need ${MIN_PASSWORD} characters or more.`,
     nouser: 'That person does not exist.',
   };
@@ -648,6 +656,11 @@ ${msg && notes[msg] ? `<p class="note">${notes[msg]}</p>` : ''}
 </div>
 
 <h2>People</h2>
+<form class="newuser" method="post" action="/admin/newuser">
+  <input class="pw" name="username" placeholder="Name" autocomplete="off" spellcheck="false" pattern="[a-zA-Z0-9._-]{2,32}" required>
+  <input class="pw" name="password" type="password" placeholder="Password, ${MIN_PASSWORD} or more" minlength="${MIN_PASSWORD}" autocomplete="new-password" required>
+  <button class="btn primary" type="submit">Add person</button>
+</form>
 <p class="hint">Folders opens the list where you show or hide each folder for that person.</p>
 <table><thead><tr><th>Person</th><th class="hide">Sees</th><th>Actions</th></tr></thead><tbody>${
     userRows || '<tr><td colspan="3">Nobody here yet. Run node scripts/seed-users.mjs to add the first accounts.</td></tr>'
@@ -1215,6 +1228,19 @@ const server = http.createServer(async (req, res) => {
           else q.delAllSessions.run(hit.id);
           cache.clear();
           return send({ status: 303, body: '', headers: { location: '/admin?m=pw', 'cache-control': 'no-store' } });
+        }
+
+        // Add one person. The password is hashed here, never stored or logged raw.
+        if (url.pathname === '/admin/newuser' && body.username && body.password) {
+          const back = (m) => send({ status: 303, body: '', headers: { location: '/admin?m=' + m, 'cache-control': 'no-store' } });
+          const name = String(body.username).trim().toLowerCase();
+          const pw = String(body.password);
+          if (!/^[a-z0-9._-]{2,32}$/.test(name)) return back('badname');
+          if (pw.length < MIN_PASSWORD) return back('pwshort');
+          if (q.userByName.get(name)) return back('exists');
+          q.createUser.run(name, await argonHash(pw, ARGON), now());
+          cache.clear();
+          return back('created');
         }
 
         // Show or hide one folder for one person, or for everyone.

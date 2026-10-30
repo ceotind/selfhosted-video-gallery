@@ -148,6 +148,10 @@ docker compose exec gallery node /app/scripts/seed-users.mjs /data/seed/seed-use
 
 - Actions on `/admin`: Folders, Password, Disable. Password opens a small box and needs no old
   password. Disable signs the person out everywhere and blocks them until you enable them again.
+- Add a person from `/admin`: type a name and a password, then press Add person. The password is
+  hashed before it is stored, and the new person can sign in at once. Names use letters, numbers,
+  dot, dash or underscore.
+- A person you add is not an admin. Admins come from `ADMIN_USERS`.
 - A search box filters the people list, and the folder list, as you type.
 - An admin cannot disable their own account.
 - Everyone else gets a plain "not allowed" page naming the account they are signed in as.
