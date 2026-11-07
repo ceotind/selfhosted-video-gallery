@@ -71,7 +71,15 @@ const description = 'A very fast, self-hosted video gallery. Browse folders and 
         <span id="dialog-title" class="dialog-title"></span>
         <button id="close" class="icon close" type="button" aria-label="Close">✕</button>
       </div>
-      <video id="player" controls playsinline preload="metadata" controlslist="nodownload"></video>
+      <div class="player-stage">
+        <video id="player" controls playsinline preload="metadata" controlslist="nodownload"></video>
+        <button id="prev" class="nav prev" type="button" aria-label="Previous video" title="Previous video">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <button id="next" class="nav next" type="button" aria-label="Next video" title="Next video">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+        </button>
+      </div>
     </dialog>
 
     <script>

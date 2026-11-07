@@ -11,6 +11,8 @@ const more = document.getElementById('more');
 const dialog = document.getElementById('player-dialog');
 const player = document.getElementById('player');
 const dialogTitle = document.getElementById('dialog-title');
+const prev = document.getElementById('prev');
+const next = document.getElementById('next');
 
 const state = {
   folder: null,
@@ -21,6 +23,7 @@ const state = {
   shown: PAGE,
   durations: {},
   note: '',
+  playing: null,
 };
 
 const esc = (s) =>
@@ -155,17 +158,56 @@ async function openFolder(id) {
   window.scrollTo(0, 0);
 }
 
-function openVideo(v) {
+// The player walks the same list the grid shows: folder order, or the search
+// results while a query is active.
+function visibleVideos() {
+  return state.videos.filter((v) => matches(v.n.toLowerCase()));
+}
+
+function navIndex(list) {
+  return list.findIndex((v) => v.f === state.playing);
+}
+
+// A video outside the list leaves both buttons dimmed.
+function updateNav() {
+  const list = visibleVideos();
+  const i = navIndex(list);
+  prev.disabled = i <= 0;
+  next.disabled = i < 0 || i >= list.length - 1;
+}
+
+function playAt(list, i) {
+  const v = list[i];
+  if (!v) return;
+  state.playing = v.f;
   dialogTitle.textContent = v.n;
   player.src = fileUrl(v.f);
   player.play().catch(() => {});
-  dialog.showModal();
+  if (!dialog.open) dialog.showModal();
+  updateNav();
+}
+
+function stepVideo(delta) {
+  const list = visibleVideos();
+  const i = navIndex(list);
+  if (i < 0) return;
+  const j = i + delta;
+  if (j < 0 || j >= list.length) return;
+  playAt(list, j);
+}
+
+function openVideo(v) {
+  const list = visibleVideos();
+  const at = list.findIndex((x) => x.f === v.f);
+  if (at < 0) return playAt([v], 0);
+  playAt(list, at);
 }
 
 function closeVideo() {
   player.pause();
   player.removeAttribute('src');
   player.load();
+  state.playing = null;
   if (dialog.open) dialog.close();
 }
 
@@ -195,6 +237,8 @@ search.addEventListener('input', () => {
 });
 
 document.getElementById('close').addEventListener('click', closeVideo);
+prev.addEventListener('click', () => stepVideo(-1));
+next.addEventListener('click', () => stepVideo(1));
 dialog.addEventListener('click', (e) => {
   if (e.target === dialog) closeVideo();
 });
@@ -218,6 +262,18 @@ document.getElementById('theme').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
+  const t = document.activeElement;
+  const typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  if (dialog.open && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      return stepVideo(1);
+    }
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      return stepVideo(-1);
+    }
+  }
   if (e.key === '/' && document.activeElement !== search) {
     e.preventDefault();
     search.focus();
